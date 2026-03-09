@@ -46,7 +46,14 @@ void GenerateQuiz(const std::vector<Term>& terms,
   }
 }
 
+
+enum GameState {
+    MENU,
+    GAMEPLAY
+};
+
 int main() {
+  GameState state = MENU;
   std::vector<Term> terms = GetTerms();
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
   InitWindow(800, 600, "Hello Raylib");
@@ -79,7 +86,8 @@ int main() {
   
   GenerateQuiz(terms, correctIndex, optionIndices, optionRects, 800 - 250, 600);
 
-  enum MenuOption { START_GAME };
+
+ 
   while (!WindowShouldClose()) {
 
     float dt = GetFrameTime();
@@ -207,6 +215,20 @@ int main() {
     /* --- 3. Drawing --- get updated every frame --- */
     BeginDrawing();
     ClearBackground(BLACK);
+        if (state == MENU)
+    {
+        // Draw menu
+        DrawText("NERD SNAKE", GetScreenWidth()/2 - 150, 150, 50, GREEN);
+        DrawText("Press ENTER to Start", GetScreenWidth()/2 - 150, 300, 30, WHITE);
+
+        // Start game when ENTER is pressed
+        if (IsKeyPressed(KEY_ENTER))
+        {
+            state = GAMEPLAY;
+        }
+    }
+    else if (state == GAMEPLAY)
+    {
     DrawRectangleRec(panel, DARKGRAY);
     DrawText(std::to_string(score).c_str(), 25, 25, 20, RED);
     DrawText(("Your lives:" + std::to_string(lives)).c_str(), 25, 45, 20, RED); 
@@ -236,6 +258,7 @@ int main() {
 	     18,
 	     LIGHTGRAY
 	     );
+    }
     EndDrawing();
     
   }
