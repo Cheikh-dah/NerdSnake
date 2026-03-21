@@ -1,0 +1,82 @@
+[
+    {
+        "definition": "A radiometric dating method that uses the natural abundance of the radioisotope carbon-14 to determine the age of organic materials up to about 50,000 to 60,000 years old, crucial for prehistoric archaeology.",
+        "term": "Radiocarbon Dating"
+    },
+    {
+        "definition": "The scientific method of dating tree rings to the exact year they were formed, used to date archaeological sites, historical structures, and to reconstruct past climate and environmental conditions.",
+        "term": "Dendrochronology"
+    },
+    {
+        "definition": "The study of geological or cultural layers (strata) in archaeological sites, used to determine the relative chronology of artifacts and features based on their position in the ground.",
+        "term": "Stratigraphy"
+    },
+    {
+        "definition": "The application of molecular genetics techniques, particularly ancient DNA analysis, to study past human populations, migrations, diseases, and evolutionary history.",
+        "term": "Archaeogenetics"
+    },
+    {
+        "definition": "The study of past climates, using geological, biological, and glaciological data (e.g., ice cores, tree rings, lake sediments) to understand long-term climate change and its impact on human history.",
+        "term": "Paleoclimatology"
+    },
+    {
+        "definition": "The scientific study of human skeletal remains and associated grave goods from archaeological sites to understand past populations' health, diet, disease, demography, and cultural practices.",
+        "term": "Bioarchaeology"
+    },
+    {
+        "definition": "A computer system used to capture, store, manipulate, analyze, manage, and present all types of geographical data, enabling spatial analysis of historical patterns and archaeological landscapes.",
+        "term": "GIS (Geographic Information Systems)"
+    },
+    {
+        "definition": "The acquisition of information about an object or phenomenon without making physical contact, used in archaeology via techniques like Lidar and ground-penetrating radar to detect buried features.",
+        "term": "Remote Sensing"
+    },
+    {
+        "definition": "The scientific study of pollen and spores, preserved in archaeological sediments, used to reconstruct past vegetation, environments, climate, and human impact on landscapes.",
+        "term": "Palynology"
+    },
+    {
+        "definition": "The measurement of the ratios of stable isotopes (e.g., carbon, nitrogen, oxygen, strontium) in archaeological materials (bones, teeth, artifacts) to determine past diet, migration patterns, and environmental conditions.",
+        "term": "Isotope Analysis"
+    },
+    {
+        "definition": "A dating method used to determine the age of burnt materials, such as pottery, burnt flint, and sediments, by measuring the light emitted from trapped electrons when heated.",
+        "term": "Thermoluminescence Dating"
+    },
+    {
+        "definition": "The systematic classification of artifacts into types based on shared attributes (form, material, decoration), used by archaeologists to organize data, identify cultural patterns, and establish chronological sequences.",
+        "term": "Typology"
+    },
+    {
+        "definition": "The scientific examination of the physical and chemical properties of archaeological artifacts or historical objects, often using techniques like X-ray Fluorescence (XRF) or Mass Spectrometry to determine composition and origin.",
+        "term": "Materials Analysis (e.g., XRF)"
+    },
+    {
+        "definition": "A conceptual model in demography that describes the historical shift from high birth and death rates to low birth and death rates, observed in many developed countries and used to analyze historical population changes.",
+        "term": "Demographic Transition Model"
+    },
+    {
+        "definition": "A phase in human history characterized by a shift in disease patterns, typically from infectious and parasitic diseases being primary causes of death to chronic and degenerative diseases, linked to societal development.",
+        "term": "Epidemiological Transition"
+    },
+    {
+        "definition": "Preserved physical characteristics of the past that stand in for direct meteorological measurements and enable scientists to reconstruct ancient climatic conditions, such as ice cores, tree rings, and ocean sediments.",
+        "term": "Climate Proxy"
+    },
+    {
+        "definition": "The study of diseases and injuries in ancient human and animal remains, primarily skeletal, to understand the history of health, illness, and medical conditions in past populations.",
+        "term": "Paleopathology"
+    },
+    {
+        "definition": "The study of animal remains from archaeological sites to understand human-animal interactions in the past, including diet, subsistence strategies, domestication, and environmental impacts.",
+        "term": "Zooarcheology"
+    },
+    {
+        "definition": "The study of the historical processes that may be responsible for the contemporary geographic distributions of individuals by examining phylogenetic trees and genetic lineages within species, often applied to human migration.",
+        "term": "Phylogeography"
+    },
+    {
+        "definition": "The study of the processes that affect organic remains from the time of death until their discovery, including decomposition, burial, and fossilization, crucial for interpreting archaeological site formation.",
+        "term": "Taphonomy"
+    }
+]

@@ -1,0 +1,19 @@
+cmake_minimum_required(VERSION 3.10)
+project(GeminiJSON)
+
+set(CMAKE_CXX_STANDARD 17)
+
+# Find packages
+find_package(CURL REQUIRED)
+
+# Download nlohmann/json automatically
+include(FetchContent)
+FetchContent_Declare(json
+    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp
+)
+FetchContent_MakeAvailable(json)
+
+add_executable(gemini_json main.cpp)
+
+target_link_libraries(gemini_json PRIVATE CURL::libcurl)
+target_include_directories(gemini_json PRIVATE ${json_SOURCE_DIR})

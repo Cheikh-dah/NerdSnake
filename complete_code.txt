@@ -1,0 +1,879 @@
+# Source code listing from: C:\msys64\home\cheik\NerdSnake
+# Generated: 2026-03-20T09:59:53.744864
+# File extensions: 56 extensions (all)
+# Exclude patterns: json.hpp, .git
+# Max file size: 10MB
+# Include hidden: False
+#======================================================================
+
+CMakeLists.txt
+........................................
+cmake_minimum_required(VERSION 3.15)
+project(TermGenerator VERSION 1.0.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
+endif()
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+find_package(CURL REQUIRED)
+find_package(OpenSSL REQUIRED)
+
+find_package(nlohmann_json 3.11.0 QUIET)
+if(nlohmann_json_FOUND)
+    message(STATUS "Found nlohmann_json: ${nlohmann_json_DIR}")
+else()
+    message(STATUS "nlohmann_json not found, will use downloaded version")
+    include(FetchContent)
+    FetchContent_Declare(
+        nlohmann_json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG v3.11.3
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(nlohmann_json)
+endif()
+
+add_executable(generate_terms
+    generate_terms.cpp
+    dotenv.cpp
+)
+
+target_include_directories(generate_terms PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CURL_INCLUDE_DIRS}
+)
+
+target_link_libraries(generate_terms PRIVATE
+    ${CURL_LIBRARIES}
+    ${OPENSSL_LIBRARIES}
+    nlohmann_json::nlohmann_json
+)
+
+if(MSVC)
+    target_compile_options(generate_terms PRIVATE /W4)
+else()
+    target_compile_options(generate_terms PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+........................................
+
+complete_code.txt
+........................................
+
+........................................
+
+dotenv.cpp
+........................................
+#include "dotenv.h"
+#include <fstream>
+#include <string>
+#include <unordered_map>
+#include <algorithm>
+#include <cctype>
+
+// Trim whitespace from both ends
+static std::string trim(const std::string& str) {
+    size_t first = str.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t\r\n");
+    return str.substr(first, last - first + 1);
+}
+
+std::unordered_map<std::string, std::string> LoadEnv(const std::string& path)
+{
+    std::unordered_map<std::string, std::string> env;
+
+    std::ifstream file(path);
+    if (!file.is_open()) return env;
+
+    std::string line;
+
+    while (std::getline(file, line))
+    {
+        // Skip empty lines and comments
+        if (line.empty() || line[0] == '#') continue;
+
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+
+        std::string key = trim(line.substr(0, eq));
+        std::string value = trim(line.substr(eq + 1));
+        
+        // Remove quotes if present
+        if (value.size() >= 2 && 
+            ((value.front() == '"' && value.back() == '"') ||
+             (value.front() == '\'' && value.back() == '\''))) {
+            value = value.substr(1, value.size() - 2);
+        }
+
+        if (!key.empty()) {
+            env[key] = value;
+        }
+    }
+
+    return env;
+}
+........................................
+
+dotenv.h
+........................................
+#pragma once
+#include <string>
+#include <unordered_map>
+
+std::unordered_map<std::string, std::string> LoadEnv(const std::string& path);
+........................................
+
+generate_terms.cpp
+........................................
+#include <iostream>
+#include <string>
+#include <regex>
+#include <fstream>
+#include <curl/curl.h>
+#include <nlohmann/json.hpp>
+#include "dotenv.h"
+
+class GeminiClient {
+private:
+  std::string apiKey;
+  std::string model;
+    
+  static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* buffer) {
+    size_t totalSize = size * nmemb;
+    buffer->append(static_cast<char*>(contents), totalSize);
+    return totalSize;
+  }
+  
+  std::string cleanJsonResponse(const std::string& raw) {
+    // Remove markdown code blocks
+    std::string cleaned = std::regex_replace(raw, std::regex("```json\\s*"), "");
+    cleaned = std::regex_replace(cleaned, std::regex("```"), "");
+    
+    // Trim whitespace
+    cleaned = std::regex_replace(cleaned, std::regex("^\\s+|\\s+$"), "");
+    
+    // Find JSON array/object (using regex with multiline support)
+    std::smatch match;
+    // Use regex::extended with multiline flag
+    std::regex jsonPattern(R"((\{[\s\S]*\}|\[[\s\S]*\]))");
+    if (std::regex_search(cleaned, match, jsonPattern)) {
+      cleaned = match.str(0);
+    }
+    
+    // Fix trailing commas
+    cleaned = std::regex_replace(cleaned, std::regex(",\\s*([\\]\\}])"), "$1");
+    
+    return cleaned;
+  }
+  
+public:
+  GeminiClient(const std::string& key, const std::string& mdl = "gemini-2.0-flash")
+    : apiKey(key), model(mdl) {}
+  
+  nlohmann::json generateContent(const std::string& prompt) {
+    std::string response = makeApiRequest(prompt);
+    std::string cleaned = cleanJsonResponse(response);
+    
+    try {
+      return nlohmann::json::parse(cleaned);
+    } catch (const nlohmann::json::parse_error& e) {
+      std::cerr << "Failed to parse JSON!" << std::endl;
+      std::cerr << "Error: " << e.what() << std::endl;
+      std::cerr << "Cleaned JSON text: " << cleaned << std::endl;
+      throw;
+    }
+  }
+  
+  std::string makeApiRequest(const std::string& prompt) {
+    std::string url = "https://generativelanguage.googleapis.com/v1beta/models/" + 
+      model + ":generateContent?key=" + apiKey;
+    
+    nlohmann::json requestBody = {
+      {"contents", {{
+	    {"parts", {{{"text", prompt}}}}
+	  }}}
+    };
+    
+    std::string requestStr = requestBody.dump();
+    
+    CURL* curl = curl_easy_init();
+    std::string response;
+    
+    if (curl) {
+      struct curl_slist* headers = nullptr;
+      headers = curl_slist_append(headers, "Content-Type: application/json");
+      
+      curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, requestStr.c_str());
+      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+      
+      CURLcode res = curl_easy_perform(curl);
+      if (res != CURLE_OK) {
+	std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+	curl_easy_cleanup(curl);
+	curl_slist_free_all(headers);
+	return "";
+      }
+      
+      curl_easy_cleanup(curl);
+      curl_slist_free_all(headers);
+    }
+    
+    try {
+      auto jsonResponse = nlohmann::json::parse(response);
+      return jsonResponse["candidates"][0]["content"]["parts"][0]["text"];
+    } catch (...) {
+      return response;
+    }
+  }
+};
+
+int main(int argc, char* argv[]) {
+  if (argc < 2) {
+    std::cout << "Usage: " << argv[0] << " <topic>" << std::endl;
+    return 1;
+  }
+  
+  std::string topic = argv[1];
+  std::string prompt = "Generate 20 science terms about " + topic + 
+    " with definitions in JSON. Return ONLY a JSON array of objects with 'term' and 'definition' fields.";
+    
+  const char* apiKeyEnv = std::getenv("GEMINI_API_KEY");
+  std::string apiKeyStr;
+  
+  if (apiKeyEnv) {
+    apiKeyStr = apiKeyEnv;       // safe copy
+  } else {
+    auto env = LoadEnv(".env");
+    auto it = env.find("GEMINI_API_KEY");
+    if (it != env.end()) {
+      apiKeyStr = it->second;  // safe copy
+    }
+  }
+    
+  if (apiKeyStr.empty()) {
+    std::cerr << "Please set GEMINI_API_KEY environment variable or create a .env file" << std::endl;
+    return 1;
+  }
+    
+    
+  try {
+    GeminiClient client(apiKeyStr);
+      
+    nlohmann::json terms = client.generateContent(prompt);
+      
+    std::cout << "=== RAW RESPONSE ===" << std::endl;
+    std::cout << terms.dump(2) << std::endl;
+      
+    std::ofstream file("terms.json");
+    if (file.is_open()) {
+      file << terms.dump(4) << std::endl;
+      file.close();
+      std::cout << "terms.json generated successfully!" << std::endl;
+    } else {
+      std::cerr << "Failed to open terms.json for writing" << std::endl;
+      return 1;
+    }
+      
+    if (terms.is_array()) {
+      std::cout << "\nFirst 3 terms:" << std::endl;
+      for (size_t i = 0; i < std::min(terms.size(), size_t(3)); ++i) {
+	std::cout << "- " << terms[i]["term"] << ": " 
+		  << terms[i]["definition"] << std::endl;
+      }
+    }
+      
+  } catch (const std::exception& e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+    return 1;
+  }
+    
+  return 0;
+}
+........................................
+
+main.cpp
+........................................
+#include "raylib.h"
+#include <string>
+#include <vector>
+#include <cmath>
+#include <cstdlib>
+#include "dotenv.h"
+#include "terms.h"
+#include "json.hpp"
+#include <fstream>
+
+void snakeBlock(Rectangle rec)
+{
+  DrawRectangleRec(rec, YELLOW);
+}
+
+void foodBlock(Rectangle rec)
+{
+  DrawRectangleRec(rec, RED);
+}
+
+void GenerateQuiz(const std::vector<Term>& terms,
+                  int& correctIndex,
+                  int optionIndices[3],
+                  Rectangle optionRects[3],
+                  float gameWidth,
+                  float screenHeight)
+{
+  correctIndex = GetRandomValue(0, terms.size() - 1);
+  optionIndices[0] = correctIndex;
+  
+  // Generate 2 different wrong answers
+  for (int i = 1; i < 3; i++)
+    {
+      int r;
+      do {
+	r = GetRandomValue(0, terms.size() - 1);
+      } while (r == correctIndex ||
+	       r == optionIndices[0] ||
+	       r == optionIndices[1]);
+      optionIndices[i] = r;
+    }
+  
+  // Position them randomly
+  for (int i = 0; i < 3; i++){
+    optionRects[i].x = (float)GetRandomValue(0,(int)(gameWidth - 120));
+    optionRects[i].y = (float)GetRandomValue(0, (int)(screenHeight - 150));
+    optionRects[i].width = 120.0f;
+    optionRects[i].height = 40.0f; 
+  }
+}
+
+
+enum GameState {
+  MENU,
+  GAMEPLAY,
+  GAMEOVER
+};
+
+std::string scienceTopic = "";
+int maxTopicLength = 12;
+
+std::string command = "python generate_terms.py " + scienceTopic;
+std::vector<Term> LoadTermsFromJSON(const std::string& filename) {
+    std::vector<Term> terms;
+    std::ifstream file(filename);
+    if (!file.is_open()) return terms;
+
+    nlohmann::json j;
+    file >> j;
+
+    for (auto& item : j) {
+        Term t;
+        t.word = item["word"].get<std::string>();
+        t.definition = item["definition"].get<std::string>();
+        terms.push_back(t);
+    }
+
+    return terms;
+}
+
+int main() {
+  GameState state = MENU;
+  std::vector<Term> terms = GetTerms();
+  SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+  InitWindow(800, 600, "Hello Raylib");
+  int score = 0;
+  int lives = 3;
+  
+  int correctIndex = 0;          // index in terms
+  int optionIndices[3];          // 3 word choices
+  Rectangle optionRects[3];      // rectangles for each word
+  
+  int currentTermIndex = GetRandomValue(0, terms.size() - 1);
+  std::string eatenWord = "";
+  std::string eatenDefinition = "";
+  
+  // our "sprites" ;) 
+  Rectangle snakeRec = { 370, 300, 30, 30 };
+  float angle = 0.0f;
+  //float speed = 250.0f;
+  float speed = 250.0f;
+  //float baseSpeed = 300.0f;
+  //float speed;
+  Vector2 target = { snakeRec.x, snakeRec.y };
+  Vector2 lastMouse = { -1, -1 };
+  float threshold = 5.0f;
+  Rectangle foodRec  = { (float)GetRandomValue(0, 600), (float)GetRandomValue(0, 500), 100, 40};
+  
+  // Store original windowed size
+  int originalWidth = 800;
+  int originalHeight = 600;
+  
+  GenerateQuiz(terms, correctIndex, optionIndices, optionRects, 800 - 250, 600);
+  
+  auto env = LoadEnv(".env");
+  std::string apiKey = env["GEMINI_API_KEY"];
+  
+  while (!WindowShouldClose()) {
+    
+    float dt = GetFrameTime();
+    
+    int panelWidth = GetScreenWidth() * 0.25f; // 25% of window width
+    
+    if (panelWidth < 250) panelWidth = 250;   // minimum width
+    if (panelWidth > 500) panelWidth = 500;   // maximum width
+    
+    //Our side ANKI :-)
+    Rectangle panel = {
+      (float)(GetScreenWidth() - panelWidth),
+      0.0f,
+      (float)panelWidth,
+      (float)GetScreenHeight()
+    };
+    
+    /* --- 1. INPUT TAKING (START HERE) --- */
+    /* --- 1. INPUT TAKING (START HERE) --- */
+    
+    // snake center
+    float centerX = snakeRec.x + snakeRec.width / 2;
+    float centerY = snakeRec.y + snakeRec.height / 2;
+    
+    // mouse position
+    float mouseX = GetMouseX();
+    float mouseY = GetMouseY();
+    
+    // angle toward mouse
+    float targetAngle = atan2(mouseY - centerY, mouseX - centerX);
+    
+    // maximum turning speed
+    float maxTurnSpeed = 5.0f; // radians per second
+    
+    float angleDiff = targetAngle - angle;
+    
+    // normalize to [-PI, PI]
+    while (angleDiff > PI) angleDiff -= 2 * PI;
+    while (angleDiff < -PI) angleDiff += 2 * PI;
+    
+    // smooth turning
+    if (angleDiff > maxTurnSpeed * dt) angleDiff = maxTurnSpeed * dt;
+    if (angleDiff < -maxTurnSpeed * dt) angleDiff = -maxTurnSpeed * dt;
+    
+    angle += angleDiff;
+    
+    // move forward
+    snakeRec.x += cos(angle) * speed * dt;
+    snakeRec.y += sin(angle) * speed * dt;
+    /*float centerX = snakeRec.x + snakeRec.width / 2;
+      float centerY = snakeRec.y + snakeRec.height / 2;
+    
+    float mouseX = GetMouseX();
+    float mouseY = GetMouseY();
+    
+    // If mouse moved → compute new direction ONCE
+    if (mouseX != lastMouse.x || mouseY != lastMouse.y)
+    {
+    float dx = mouseX - centerX;
+    float dy = mouseY - centerY;
+    
+    angle = atan2(dy, dx);   //set new direction instantly
+    
+    lastMouse = { mouseX, mouseY };
+    }
+    
+    // Always move forward
+    snakeRec.x += cos(angle) * speed * dt;
+    snakeRec.y += sin(angle) * speed * dt;
+    */
+    /* ------------------------------------ */
+    // Toggle fullscreen with F11
+    if (IsKeyPressed(KEY_F11)) {
+      if (!IsWindowFullscreen()) {
+	// Switch to fullscreen at monitor's native resolution
+	int monitor = GetCurrentMonitor();
+	SetWindowSize(GetMonitorWidth(monitor), GetMonitorHeight(monitor));
+	ToggleFullscreen();
+      } else {
+	// Return to windowed mode with original size
+	ToggleFullscreen();
+	SetWindowSize(originalWidth, originalHeight);
+      }
+    }
+    
+    /*if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+      speed = 400;
+      else
+      speed = 250;*/
+    
+    /* --- 2. UPDATE / LOGIC ---
+       (Collision checks, AI, etc. go here)*/
+    float gameWidth = GetScreenWidth() - panelWidth;
+    
+    //eating - yammmmmmmmmy ;)                
+    //collision
+    for (int i = 0; i < 3; i++)
+      {
+	if (CheckCollisionRecs(snakeRec, optionRects[i]))
+	  {
+	    if (optionIndices[i] == correctIndex)
+	      {
+		score++;
+	      }
+	    else
+	      {
+		lives--;
+	      }
+	    
+	    GenerateQuiz(terms, correctIndex, optionIndices, optionRects,
+			 gameWidth, GetScreenHeight());
+	    break;
+	  }
+      }
+    
+    // prevent the snake from going under the panel
+    if (snakeRec.x < 0) snakeRec.x = 0;
+    if (snakeRec.x + snakeRec.width > gameWidth)
+      snakeRec.x = gameWidth - snakeRec.width;
+    
+    if (snakeRec.y < 0) snakeRec.y = 0;
+    if (snakeRec.y + snakeRec.height > GetScreenHeight())
+      snakeRec.y = GetScreenHeight() - snakeRec.height;
+    
+    //intreducing Lossing TT outch!!    
+    if (lives <= 0)
+      {
+	state = GAMEOVER;
+	lives = 3;
+	score = 0;
+        //snakeRec.x;
+	//snakeRec.y
+	snakeRec.x = originalWidth / 2.0f;
+	snakeRec.y = originalHeight / 2.0f;
+      }
+    
+    /* --- 3. Drawing --- get updated every frame --- */
+    BeginDrawing();
+    ClearBackground(BLACK);
+    if (state == MENU)
+      {
+	int key = GetCharPressed();
+	
+	// Add characters
+	while (key > 0)
+	  {
+	    if ((key >= 32) && (key <= 125) && scienceTopic.length() < maxTopicLength)
+	      {
+	        scienceTopic += (char)key;
+	      }
+	    key = GetCharPressed();
+	  }
+	
+	// Backspace support
+	if (IsKeyPressed(KEY_BACKSPACE) && !scienceTopic.empty())
+	  {
+	    scienceTopic.pop_back();
+	  }
+	
+	// Start game only if name exists
+	if (IsKeyPressed(KEY_ENTER) && !scienceTopic.empty()) {
+	  // 1- Generate JSON from Python
+	  std::string command = "python generate_terms.py " + scienceTopic;
+	  system(command.c_str());
+	  
+	  // 2️- Load the JSON into your vector
+	  terms = LoadTermsFromJSON("terms.json");
+	  
+	  if (terms.size() < 10) {
+	    TraceLog(LOG_WARNING, "AI returned too few terms, using defaults.");
+	    terms = GetTerms();
+	  }
+	  
+	  // 3️- Generate the first quiz
+	  float panelWidth = GetScreenWidth() * 0.25f;
+	  if (panelWidth < 250) panelWidth = 250;
+	  if (panelWidth > 500) panelWidth = 500;
+	  GenerateQuiz(terms, correctIndex, optionIndices, optionRects,
+		       GetScreenWidth() - panelWidth, GetScreenHeight());
+	  
+	  // 4️- Switch to gameplay
+	  state = GAMEPLAY;
+	}
+	
+	// Draw menu
+	DrawText("NERD SNAKE", GetScreenWidth()/2 - 150, 120, 50, GREEN);
+	
+	DrawText("Enter Science Topic:", GetScreenWidth()/2 - 150, 230, 25, WHITE);
+	
+	Rectangle topicBox = { (float)(GetScreenWidth()/2 - 150), 270.0f, 300.0f, 40.0f };
+	
+	DrawRectangleLinesEx(topicBox, 2, WHITE);
+	
+	DrawText(scienceTopic.c_str(),
+		 topicBox.x + 10,
+		 topicBox.y + 10,
+		 20,
+		 YELLOW);
+	
+	DrawText("Press ENTER to Start",
+		 GetScreenWidth()/2 - 150,
+		 340,
+		 20,
+		 GRAY);
+	//system(command.c_str());
+
+      }
+    else if (state == GAMEPLAY)
+      {
+	DrawRectangleRec(panel, DARKGRAY);
+	DrawText(("Score: " +std::to_string(score)).c_str(), 25, 25, 20, RED);
+	DrawText(("lives: " + std::to_string(lives)).c_str(), 25, 45, 20, RED); 
+	for (int i = 0; i < 3; i++)
+	  {
+	    DrawRectangleRec(optionRects[i], MAROON);
+	    
+	    DrawText(
+		     terms[optionIndices[i]].word.c_str(),
+		     optionRects[i].x + 10,
+		     optionRects[i].y + 10,
+		     20,
+		     WHITE
+		     );
+	  }
+	snakeBlock(snakeRec);
+	
+	//Show eaten word in our side ANKI :-)
+	int panelTextX = GetScreenWidth() - panelWidth + 20;
+	int panelTextY = 50;
+	
+	DrawText("Definition:", panelTextX, panelTextY, 20, WHITE);
+	DrawText(
+		 terms[correctIndex].definition.c_str(),
+		 panelTextX,
+		 panelTextY + 30,
+		 18,
+		 LIGHTGRAY
+		 );
+      }
+    else if(state == GAMEOVER)
+      {
+	// Draw GAMEOVER TT  
+	DrawText("GAME OVER!", GetScreenWidth()/2 - 150, 200, 50, RED);
+	DrawText("Press ENTER to Restart", GetScreenWidth()/2 - 190, 350, 30, WHITE);
+	DrawText("Press M to go to menu", GetScreenWidth()/2 - 170, 450, 30, WHITE);
+	// Restart game when ENTER is pressed
+	if (IsKeyPressed(KEY_ENTER))
+	  {
+	    state = GAMEPLAY;
+	  }
+	else if (IsKeyDown(KEY_M))
+	  {
+	    state = MENU;
+	  }
+      }
+    EndDrawing();
+    
+  }
+  
+  CloseWindow();
+  return 0;
+}
+
+//MADE WITH LOVE BY CHEIKH_DAH <3
+........................................
+
+terms.cpp
+........................................
+#include "terms.h"
+
+std::vector<Term> GetTerms() {
+    return {
+        {"RNA", "Ribonucleic acid involved in gene expression."},
+        {"miRNA", "MicroRNA regulating gene expression."},
+        {"siRNA", "Small interfering RNA that silences genes."},
+        {"DNA", "Molecule carrying genetic instructions."},
+        {"Neuron", "A nerve cell that transmits signals."},
+        {"Genome", "The complete set of genetic material."},
+        {"Ribosome", "Cell structure that synthesizes proteins."},
+        {"Enzyme", "Protein that accelerates chemical reactions."},
+        {"Mutation", "Permanent change in DNA sequence."},
+        {"Protein", "Large molecule made of amino acids."}
+    };
+}
+........................................
+
+terms.h
+........................................
+#ifndef TERMS_H
+#define TERMS_H
+
+#include <string>
+#include <vector>
+
+struct Term {
+    std::string word;
+    std::string definition;
+};
+
+std::vector<Term> GetTerms();
+
+#endif
+........................................
+
+terms.json
+........................................
+{
+    "error": {
+        "code": 429,
+        "details": [
+            {
+                "@type": "type.googleapis.com/google.rpc.Help",
+                "links": [
+                    {
+                        "description": "Learn more about Gemini API quotas",
+                        "url": "https://ai.google.dev/gemini-api/docs/rate-limits"
+                    }
+                ]
+            },
+            {
+                "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                "violations": [
+                    {
+                        "quotaDimensions": {
+                            "location": "global",
+                            "model": "gemini-2.0-flash"
+                        },
+                        "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+                        "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+                    },
+                    {
+                        "quotaDimensions": {
+                            "location": "global",
+                            "model": "gemini-2.0-flash"
+                        },
+                        "quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier",
+                        "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_requests"
+                    },
+                    {
+                        "quotaDimensions": {
+                            "location": "global",
+                            "model": "gemini-2.0-flash"
+                        },
+                        "quotaId": "GenerateContentInputTokensPerModelPerMinute-FreeTier",
+                        "quotaMetric": "generativelanguage.googleapis.com/generate_content_free_tier_input_token_count"
+                    }
+                ]
+            },
+            {
+                "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                "retryDelay": "38s"
+            }
+        ],
+        "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash\nPlease retry in 38.950107621s.",
+        "status": "RESOURCE_EXHAUSTED"
+    }
+}
+........................................
+
+test_gemini.py
+........................................
+#!/usr/bin/env python3
+from google import genai
+import json
+import sys
+import re
+import os
+from pathlib import Path
+
+def clean_json_response(raw_text):
+    """Clean markdown and extract JSON from response."""
+    # Remove markdown code blocks
+    cleaned = raw_text.replace("```json", "").replace("```", "").strip()
+    
+    # Keep all valid characters (don't filter Unicode)
+    cleaned = "".join(c for c in cleaned if ord(c) >= 32 or c in "\r\n\t")
+    
+    # Find outermost JSON array or object (with multiline support)
+    match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", cleaned, re.DOTALL)
+    if not match:
+        return None, "Could not find JSON in the response!"
+    
+    json_text = match.group(0)
+    # Fix trailing commas
+    json_text = re.sub(r",(\s*[\]}])", r"\1", json_text)
+    
+    return json_text, None
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python test_gemini.py <topic>")
+        sys.exit(1)
+
+    topic = sys.argv[1]
+    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")  # Make configurable
+    
+    prompt = f"Generate 20 science terms about {topic} with definitions in JSON. Return ONLY a JSON array of objects with 'term' and 'definition' fields."
+
+    try:
+        client = genai.Client()
+        
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt
+        )
+        
+        if not response or not response.text:
+            print("Error: Empty response from API")
+            sys.exit(1)
+            
+    except Exception as e:
+        print(f"API Error: {e}")
+        sys.exit(1)
+
+    raw = response.text
+    print("=== RAW RESPONSE ===")
+    print(raw)
+
+    json_text, error = clean_json_response(raw)
+    if error:
+        print(error)
+        sys.exit(1)
+
+    try:
+        terms = json.loads(json_text)
+        
+        # Save with UTF-8 encoding
+        with open("terms.json", "w", encoding="utf-8") as f:
+            json.dump(terms, f, indent=4, ensure_ascii=False)
+            
+        print("terms.json generated successfully!")
+        
+        if isinstance(terms, list):
+            print(f"\nFirst 3 terms:")
+            for t in terms[:3]:
+                print(f"- {t.get('term', 'N/A')}: {t.get('definition', 'N/A')}")
+                
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse JSON: {e}")
+        print("Attempted JSON:")
+        print(json_text)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+........................................
+
+#======================================================================
+# Summary:
+#   Files included: 10
+#   Files skipped (excluded): 2
+#   Files skipped (hidden): 2
+#   Files skipped (extension): 11
+#   Files skipped (binary): 1
+#   Files skipped (size limit): 0
+#   Files skipped (path too long): 0
+#   Files with errors: 0
+# Total files processed: 26
