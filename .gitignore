@@ -1,1 +1,5 @@
+.env
+.env~
 *.exe
+*~
+*.save
