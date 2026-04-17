@@ -2,6 +2,7 @@
 #include <string>
 #include <regex>
 #include <fstream>
+#include <algorithm>
 #include <curl/curl.h>
 #include "json.hpp"
 #include "dotenv.h"
@@ -155,7 +156,7 @@ int main(int argc, char* argv[]) {
       
     if (terms.is_array()) {
       std::cout << "\nFirst 3 terms:" << std::endl;
-      for (size_t i = 0; i < std::min(terms.size(), size_t(3)); ++i) {
+      for (size_t i = 0; i < (std::min)(terms.size(), static_cast<size_t>(3)); ++i) {
         std::cout << "- " << terms[i]["term"] << ": " 
                   << terms[i]["definition"] << std::endl;
       }
